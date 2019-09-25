@@ -2,26 +2,27 @@ VERSION 1.0 CLASS
 BEGIN
   MultiUse = -1  'True
 END
-Attribute VB_Name = "ImmediateReporter"
+Attribute VB_Name = "FileReporter"
 Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ''
-' # ImmediateReporter
+' # FileReporter
 '
-' Report results to Immediate Window
+' Append test results to the given file
 '
 ' ```vba
 ' Dim Suite As New TestSuite
 ' ...
 '
-' Dim Reporter As New ImmediateReporter
+' Dim Reporter As New FileReporter
+' Reporter.WriteTo "path/to/file"
 ' Reporter.ListenTo Suite
 ' ```
 '
-' @class ImmediateReporter
-' @author tim.hall.engr@gmail.com
+' @class FileReporter
+' @author Tim Hall <tim.hall.engr@gmail.com>
 ' @repository https://github.com/vba-tools/vba-test
 ' @license MIT
 '' ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ '
@@ -29,33 +30,33 @@ Option Explicit
 
 Private WithEvents pSuite As TestSuite
 Attribute pSuite.VB_VarHelpID = -1
+Private FilePath As String
 Private Finished As Boolean
 
 ''
-' Listen to given TestSuite
+' Report test results to the given file path
+''
+Public Sub WriteTo(Path As Variant)
+    FilePath = Path
+End Sub
+
+''
+' Report test results from the given TestSuite
 ''
 Public Sub ListenTo(Suite As TestSuite)
     If Not pSuite Is Nothing Then
-        ' If already listening to suite,
-        ' report summary before moving on to next suite
         PrintSummary
     End If
     
     Finished = False
     Set pSuite = Suite
     PrintHeader Suite
-
-    ' Report any tests added prior to listening
-    Dim Test As TestCase
-    For Each Test In Suite.Tests
-        PrintResult Test
-    Next Test
 End Sub
 
 ' ============================================= '
 
 Private Sub PrintHeader(Suite As TestSuite)
-    Debug.Print "===" & IIf(Suite.Description <> "", " " & Suite.Description & " ===", "")
+    AppendToFile "===" & VBA.IIf(Suite.Description <> "", " " & Suite.Description & " ===", "")
 End Sub
 
 Private Sub PrintResult(Test As TestCase)
@@ -63,12 +64,12 @@ Private Sub PrintResult(Test As TestCase)
         Exit Sub
     End If
 
-    Debug.Print ResultTypeToString(Test.Result) & " " & Test.Description
+    AppendToFile ResultTypeToString(Test.Result) & " " & Test.Description
     
     If Test.Result = TestResultType.Fail Then
         Dim Failure As Variant
         For Each Failure In Test.Failures
-            Debug.Print "  " & Failure
+            AppendToFile "  " & Failure
         Next Failure
     End If
 End Sub
@@ -101,7 +102,7 @@ Private Sub PrintSummary()
         Summary = Summary & ")"
     End If
 
-    Debug.Print "= " & Summary & " = " & Now & " =" & vbNewLine
+    AppendToFile "= " & Summary & " = " & Now & " =" & vbNewLine
 End Sub
 
 Private Function ResultTypeToString(ResultType As TestResultType) As String
@@ -115,12 +116,27 @@ Private Function ResultTypeToString(ResultType As TestResultType) As String
     End Select
 End Function
 
-Private Sub pSuite_Group(Suite As TestSuite)
-    PrintHeader Suite
+Private Sub AppendToFile(Message As String)
+    If FilePath = "" Then Exit Sub
+    
+    Dim File As Integer
+    File = FreeFile
+    
+    On Error GoTo Cleanup
+    
+    Open FilePath For Append As #File
+    Print #File, Message
+    
+Cleanup:
+    Close #File
 End Sub
 
 Private Sub pSuite_Result(Test As TestCase)
     PrintResult Test
+End Sub
+
+Private Sub pSuite_Group(Suite As TestSuite)
+    PrintHeader Suite
 End Sub
 
 Private Sub Class_Terminate()
@@ -128,3 +144,4 @@ Private Sub Class_Terminate()
         PrintSummary
     End If
 End Sub
+

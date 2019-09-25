@@ -8,20 +8,25 @@ Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ''
-' TestSuite v2.0.0-beta.3
-' (c) Tim Hall - https://github.com/vba-tools/vba-test
+' # TestSuite
 '
 ' A collection of tests, with events and results
 '
+' ```vba
+' Dim Suite As New TestSuite
+' Suite.Description = "Name"
+'
+' With Suite.Test("A")
+'   .IsEqual 2 + 2, 4
+' End With
+' ```
+'
 ' @class TestSuite
 ' @author tim.hall.engr@gmail.com
-' @license MIT (https://opensource.org/licenses/MIT)
-' ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ '
+' @repository https://github.com/vba-tools/vba-test
+' @license MIT
+'' ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ '
 Option Explicit
-
-' --------------------------------------------- '
-' Types, Events, and Properties
-' --------------------------------------------- '
 
 Public Enum TestResultType
     Pass
@@ -33,26 +38,25 @@ End Enum
 Public Event BeforeEach(Test As TestCase)
 Public Event Result(Test As TestCase)
 Public Event AfterEach(Test As TestCase)
+Public Event Group(Suite As TestSuite)
 
 ''
 ' (Optional) description of suite for display in runners
-'
-' @property Description
-' @type String
 ''
 Public Description As String
 
 ''
-' @property Tests
 ' @type Collection<TestCase>
 ''
 Public Tests As VBA.Collection
 
 ''
+' @internal
+''
+Public Parent As TestSuite
+
+''
 ' Compute suite result from tests
-'
-' @property Result
-' @type SpecResultType
 ''
 Public Property Get Result() As TestResultType
     Result = TestResultType.Pending
@@ -69,7 +73,6 @@ Public Property Get Result() As TestResultType
 End Property
 
 ''
-' @property PassedTests
 ' @type Collection<TestCase>
 ''
 Public Property Get PassedTests() As VBA.Collection
@@ -77,7 +80,6 @@ Public Property Get PassedTests() As VBA.Collection
 End Property
 
 ''
-' @property FailedTests
 ' @type Collection<TestCase>
 ''
 Public Property Get FailedTests() As VBA.Collection
@@ -85,7 +87,6 @@ Public Property Get FailedTests() As VBA.Collection
 End Property
 
 ''
-' @property PendingTests
 ' @type Collection<TestCase>
 ''
 Public Property Get PendingTests() As VBA.Collection
@@ -93,47 +94,89 @@ Public Property Get PendingTests() As VBA.Collection
 End Property
 
 ''
-' @property SkippedTests
 ' @type Collection<TestCase>
 ''
 Public Property Get SkippedTests() As VBA.Collection
     Set SkippedTests = GetTestsByType(TestResultType.Skipped)
 End Property
 
-' ============================================= '
-' Public Methods
-' ============================================= '
+Public Property Get Self() As TestSuite
+    Set Self = Me
+End Property
 
 ''
-' Create a new test case with name
-'
-' @method Test
-' @param {String} Name
-' @returns {TestCase}
+' Create a new test case with description
 ''
-Public Function Test(Name As String) As TestCase
+Public Function Test(Description As String) As TestCase
     Dim Instance As New TestCase
     
-    Instance.Name = Name
+    Instance.Description = Description
     Set Instance.Suite = Me
     
-    RaiseEvent BeforeEach(Instance)
+    OnTestBefore Instance
     
     Set Test = Instance
 End Function
 
-Public Sub TestComplete(Test As TestCase)
-    Tests.Add Test
+''
+' Create a new group of tests with description
+''
+Public Function Group(Description As String) As TestSuite
+    Dim Instance As New TestSuite
+    
+    Instance.Description = Description
+    Set Instance.Parent = Me
+    
+    RaiseEvent Group(Instance)
+    
+    Set Group = Instance
+End Function
 
+''
+' @internal
+''
+Public Sub TestComplete(Test As TestCase)
+    OnTestResult Test
+    OnTestAfter Test
+End Sub
+
+''
+' @internal
+''
+Public Sub OnTestBefore(Test As TestCase)
+    If Not Me.Parent Is Nothing Then
+        Me.Parent.OnTestBefore Test
+    End If
+    
+    RaiseEvent BeforeEach(Test)
+End Sub
+
+''
+' @internal
+''
+Public Sub OnTestResult(Test As TestCase)
+    Tests.Add Test
     RaiseEvent Result(Test)
+    
+    If Not Me.Parent Is Nothing Then
+        Me.Parent.OnTestResult Test
+    End If
+End Sub
+
+''
+' @internal
+''
+Public Sub OnTestAfter(Test As TestCase)
     RaiseEvent AfterEach(Test)
+    
+    If Not Me.Parent Is Nothing Then
+        Me.Parent.OnTestAfter Test
+    End If
 End Sub
 
 ' ============================================= '
-' Private Functions
-' ============================================= '
 
-Private Function GetTestsByType(ResultType As TestResultType) As Collection
+Private Function GetTestsByType(ResultType As TestResultType) As VBA.Collection
     Dim Test As TestCase
     Dim Filtered As New VBA.Collection
     For Each Test In Me.Tests
